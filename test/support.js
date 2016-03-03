@@ -17,6 +17,9 @@ var tpl = [
       '<PicUrl><![CDATA[<%=pic%>]]></PicUrl>',
     '<% } else if (type === "voice") { %>',
       '<MediaId><%=mediaId%></MediaId>',
+      '<% if (typeof recognition !== "undefined") { %>',
+        '<Recognition><%= recognition %></Recognition>',
+      '<% } %>',
       '<Format><%=format%></Format>',
     '<% } else if (type === "link") { %>',
       '<Title><![CDATA[<%=title%>]]></Title>',
@@ -31,7 +34,7 @@ var tpl = [
     '<% } %>',
     '<% } %>',
   '</xml>'
-].join('');
+].join('\n');
 
 exports.tail = function (token) {
   var q = {

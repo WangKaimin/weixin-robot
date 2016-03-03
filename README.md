@@ -1,17 +1,20 @@
 # 微信公共帐号机器人(Weixin Robot)
 
+[![Build Status](https://api.travis-ci.org/node-webot/weixin-robot.png?branch=master)](https://travis-ci.org/node-webot/weixin-robot) [![repo dependency](https://david-dm.org/node-webot/weixin-robot.png)](https://david-dm.org/node-webot/weixin-robot)
+
 A node.js robot for wechat.
 
-[微信公众平台](http://mp.weixin.qq.com/cgi-bin/indexpage?t=wxm-index&lang=zh_CN)提供的[开放信息接口](http://mp.weixin.qq.com/cgi-bin/indexpage?t=wxm-callbackapi-doc&lang=zh_CN)的自动回复系统。
+[微信公众平台](http://mp.weixin.qq.com/)提供的[开放信息接口](http://mp.weixin.qq.com/wiki/index.php?title=%E9%A6%96%E9%A1%B5)的自动回复系统。
 
-`weixin-robot` 是 [webot](https://github.com/node-webot/webot) 和 [wechat](https://github.com/node-webot/wechat) 的
-高级包装。`webot` 负责定义回复规则，`wechat` 负责与微信服务器通信。
+`weixin-robot` 是 [webot](https://github.com/node-webot/webot) 和 [wechat-mp](https://github.com/node-webot/wechat-mp) 的
+高级包装。`webot` 负责定义回复规则，`wechat-mp` 负责与微信服务器通信。
 
 功能特色：
 
 1. 方便灵活的规则定义，轻松实现文本匹配流程控制
 2. 基于正则表达式的对话设定，配置简单，可以给一句话随机回复不同内容
 3. 支持等待后续操作模式，如可以提示用户“需要我执行xxx操作吗？”
+4. 可直接从 yaml 或 json 文件中载入对话规则
 
 ## 使用示例：
 
@@ -19,6 +22,8 @@ A node.js robot for wechat.
 
 ![豆瓣同城微信帐号二维码：douban-event](http://i.imgur.com/ijE19.jpg)
 ![微信机器人测试帐号：webot-test](http://i.imgur.com/6IcAJgH.jpg)
+
+[更多使用此项目的微信机器人列表](https://github.com/node-webot/weixin-robot/wiki/%E4%BD%BF%E7%94%A8%E6%AD%A4%E7%B3%BB%E7%BB%9F%E7%9A%84%E5%BE%AE%E4%BF%A1%E5%B8%90%E5%8F%B7)
 
 ## 快速入门 | [FAQ](https://github.com/node-webot/weixin-robot/wiki/FAQ) | [示例](https://github.com/node-webot/webot-example)
 
@@ -40,18 +45,40 @@ webot.set('subscribe', {
   }
 });
 
-// 接管消息请求
-webot.watch(app, { token: 'your1weixin2token' });
+webot.set('test', {
+  pattern: /^test/i,
+  handler: function(info, next) {
+    next(null, 'roger that!')
+  }
+})
 
-// 如果需要多个实例：
-webot2 = webot();
+// 你可以获取已定义的 rule
+//
+// webot.get('subscribe') ->
+//
+// {
+//   name: 'subscribe',
+//   pattern: function(info) {
+//     return info.is('event') && info.param.event === 'subscribe';
+//   },
+//   handler: function(info) {
+//     return '欢迎订阅微信机器人';
+//   }
+// }
+//
+
+// 接管消息请求
+webot.watch(app, { token: 'your1weixin2token', path: '/wechat' });
+
+// 如果需要多个实例（即为多个微信账号提供不同回复）：
+var webot2 = new webot.Webot();
 webot2.set({
   '/hi/i': 'Hello',
   '/who (are|r) (you|u)/i': 'I\'m a robot.'
 });
 webot2.watch(app, {
-  token: 'your1wechat2token3',
-  path: '/wechat_en',
+  token: 'token2',
+  path: '/wechat_en', // 这个path不能为之前已经监听过的path的子目录
 });
 
 // 启动 Web 服务
@@ -63,6 +90,9 @@ app.listen(80);
 // app.listen(process.env.PORT);
 // app.enable('trust proxy');
 ```
+
+然后你就可以在微信公众平台后台填入你的接口地址和 token ，
+或者使用 [webot-cli](https://github.com/node-webot/webot-cli) 来调试消息。
 
 如果一切顺利，你也搭建好了自己的机器人，欢迎到[此项目的 Wiki 页面](https://github.com/node-webot/weixin-robot/wiki/%E4%BD%BF%E7%94%A8%E6%AD%A4%E7%B3%BB%E7%BB%9F%E7%9A%84%E5%BE%AE%E4%BF%A1%E5%B8%90%E5%8F%B7)添加你的帐号。
 
@@ -79,9 +109,28 @@ app.listen(80);
 
     webot help menu
 
+## 版本历史 | [详细](https://github.com/node-webot/weixin-robot/blob/master/History.md)
+
+- 0.5.0 - 换用更精简的 [wechat-mp](https://github.com/node-webot/wechat-mp) 模块
+
+  注意： 现在如果要启用session支持，`webot.watch` 必须在 `app.use(connect.session())` 之前
+
+
 # API 参考
 
+### 微信自动回复API流程图
+
+![Wechat API flow](https://github.com/node-webot/weixin-robot/blob/master/wechat-api-flow.png?raw=true)
+
+## 规则定义
+
 &gt; 具体的规则定义部分，请参考 [webot](https://github.com/node-webot/webot) 的文档。
+
+主要API:
+
+- [webot.set()](https://github.com/node-webot/webot#webotsetpattern-handler--replies)
+- [webot.waitRule()](https://github.com/node-webot/webot#webotwaitrulename-handler)
+- [webot.loads()](https://github.com/node-webot/webot#webotloadsfile1-file2-)
 
 ## info 对象
 
@@ -97,12 +146,12 @@ webot rule 的 handler 接收到的 info 对象，包含请求消息内容和 se
 
 原始请求参数与 info 属性的对照表：
 
-    官方参数名        定义                        info对象属性                     备注 
+    官方参数名        定义                        info对象属性                     备注
     -------------------------------------------------------------------------------------------------------
 
-    ToUserName      开发者微信号                   info.uid
-    FromUserName    发送方帐号（一个OpenID）       info.sp                     sp means "service provider"
-    CreateTime      消息创建时间 （整型）         
+    ToUserName      开发者微信号                   info.sp                      sp means "service provider"
+    FromUserName    发送方帐号（一个OpenID）       info.uid
+    CreateTime      消息创建时间 （整型）
     MsgId           消息id                         info.id
     MsgType         消息类型                       info.type
     -------------------------------------------------------------------------------------------------------
@@ -112,7 +161,7 @@ webot rule 的 handler 接收到的 info 对象，包含请求消息内容和 se
     -------------------------------------------------------------------------------------------------------
     Location_X      地理位置纬度(lat)              info.param.lat               MsgType == location
     Location_Y      地理位置经度(lng)              info.param.lng
-    Scale           地图缩放大小                   info.param.scale           
+    Scale           地图缩放大小                   info.param.scale
     Label           地点名                         info.param.label             可能为空
     -------------------------------------------------------------------------------------------------------
     Title           消息标题                       info.param.title              MsgType == link
@@ -123,12 +172,22 @@ webot rule 的 handler 接收到的 info 对象，包含请求消息内容和 se
                     subscribe(订阅)、
                     unsubscribe(取消订阅)、
                     CLICK(自定义菜单点击事件)
+                    LOCATION(上报地理位置事件)
 
     EventKey        事件KEY值，与自定义菜单接      info.param.eventKey
                     口中KEY值对应
     --------------------------------------------------------------------------------------------------------
-    MediaId         媒体文件的 id                  info.param.mediaId             MsgType == audio
+    MediaId         媒体文件的 id                  info.param.mediaId             MsgType == voice / video
+    Recognition     语音识别的文本                 info.param.recognition         MsgType == voice
+    ThumbMediaId    视频消息缩略图的媒体id         info.param.thumbMediaId        MsgType == video
     Format          音频文件的格式                 info.param.format
+
+
+**注意：**
+
+ - 大部分属性值只是把首字母大写换成了小写。地理信息的 `Location_X` 和 `Location_Y` 除外。
+ - recognition 参数需要开通微信的语音识别功能，同时为方便调用，此文本也会直接存到 info.text
+   也就是说，语音识别消息与普通文本消息都有 `info.text` ，只不过 `info.type` 不同
 
 
 例如，地理位置消息( MsgType === 'location') 会被转化为：
@@ -147,8 +206,6 @@ webot rule 的 handler 接收到的 info 对象，包含请求消息内容和 se
   }
 }
 ```
-
-大部分属性值只是把首字母大写换成了小写。地理信息的 Location_X 和 Location_Y 除外。
 
 ### info.reply
 
@@ -221,23 +278,19 @@ info.reply = {
 
 Have fun with wechat, and enjoy being a robot!
 
-### info.flag
+### info.noReply
 
-微信允许你在回复消息时标记一个 `FuncFlag` ，
-可以在公共平台后台的「**星标消息**」中查看带标记的消息。
-适合你的机器人不懂如何回复用户消息时使用。
-在 `webot` 中，你只需在 handler 中给 `info.flag` 赋值 `true` 即可。
+如果对不想回复的消息，可设置 `info.noReply = true`
 
 ```javascript
-// 把这句放到你的规则的最末尾
-webot.set('fallback', {
-  pattern: /.*/,
+// 比如对于语音类型的消息不回复
+webot.set('ignore', {
+  pattern: function(info) {
+    return info.is('voice');
+  },
   handler: function(info) {
-    info.flag = true;
-    return ['唔.. 暂时听不懂您说的什么呢',
-    '不好意思，我不太懂您说的什么意思',
-    '哎呀，听不懂啦！', 
-    '这个我不是很懂，不如我们聊点别的吧？']
+    info.noReply = true;
+    return;
   }
 });
 ```
@@ -251,3 +304,7 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/node-webot/weixin-robot/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
+

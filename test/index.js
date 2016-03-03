@@ -7,6 +7,8 @@ var tail = require('./support').tail;
 var connect = require('connect');
 var webot = require('../');
 
+connect.query = require('connect-query');
+
 describe('weixin.js', function () {
   describe('watch option', function () {
     var app;
@@ -17,11 +19,19 @@ describe('weixin.js', function () {
       // 指定回复消息
       webot.set('hi', '你好');
       webot.set('news', { url: 'http://example.com', title: 'Good job, your grace!' });
+      // 回复音乐消息
       webot.set('music', { type: 'music', url: 'http://example.com' });
+      // 收到地理位置消息
       webot.set(function is_location(info) {
         return info.is('location');
       }, function(info) {
         return JSON.stringify(info.param);
+      });
+      // 收到语音消息
+      webot.set(function(info) {
+        return info.is('voice');
+      }, function(info) {
+        return info.param.recognition + info.text;
       });
 
       // 接管消息请求
@@ -65,14 +75,16 @@ describe('weixin.js', function () {
         .send(template(info))
         .expect(200)
         .end(function(err, res){
-          if (err) return done(err);
+          if (err) {
+            console.log(res.text)
+            return done(err);
+          }
           var body = res.text.toString();
-          body.should.include('<ToUserName><![CDATA[diaosi]]></ToUserName>');
-          body.should.include('<FromUserName><![CDATA[nvshen]]></FromUserName>');
-          body.should.match(/<CreateTime>\d{13}<\/CreateTime>/);
-          body.should.include('<MsgType><![CDATA[text]]></MsgType>');
-          body.should.include('<Content><![CDATA[你好]]></Content>');
-          body.should.include('<FuncFlag>0</FuncFlag>');
+          body.should.containEql('<ToUserName><![CDATA[diaosi]]></ToUserName>');
+          body.should.containEql('<FromUserName><![CDATA[nvshen]]></FromUserName>');
+          body.should.match(/<CreateTime>\d{10}<\/CreateTime>/);
+          body.should.containEql('<MsgType><![CDATA[text]]></MsgType>');
+          body.should.containEql('<Content><![CDATA[你好]]></Content>');
           done();
         });
       });
@@ -94,7 +106,7 @@ describe('weixin.js', function () {
         .end(function(err, res){
           if (err) return done(err);
           var body = res.text.toString();
-          body.should.include('<MsgType><![CDATA[news]]></MsgType>');
+          body.should.containEql('<MsgType><![CDATA[news]]></MsgType>');
           done();
         });
       });
@@ -113,7 +125,7 @@ describe('weixin.js', function () {
         .end(function(err, res){
           if (err) return done(err);
           var body = res.text.toString();
-          body.should.include('<MsgType><![CDATA[music]]></MsgType>');
+          body.should.containEql('<MsgType><![CDATA[music]]></MsgType>');
           done();
         });
       });
@@ -128,14 +140,14 @@ describe('weixin.js', function () {
           lat: '100',
           lng: '30',
           scale: '15',
-          label: "Ya'an"
+          label: "Yaan"
         };
 
         var param = {
           lat: '100',
           lng: '30',
           scale: '15',
-          label: "Ya'an"
+          label: "Yaan"
         };
 
         request(app)
@@ -145,7 +157,28 @@ describe('weixin.js', function () {
         .end(function(err, res){
           if (err) return done(err);
           var body = res.text.toString();
-          body.should.include('<Content><![CDATA[' + JSON.stringify(param) + ']]></Content>');
+          body.should.containEql('<Content><![CDATA[' + JSON.stringify(param) + ']]></Content>');
+          done();
+        });
+      });
+      it('should pass recognition to text', function(done) {
+        var info = {
+          sp: 'nvshen',
+          user: 'diaosi',
+          type: 'voice',
+          mediaId: 'abced',
+          format: 'amr',
+          recognition: '这是文本'
+        };
+
+        request(app)
+        .post('/' + tail('your1weixin2token'))
+        .send(template(info))
+        .expect(200)
+        .end(function(err, res){
+          if (err) return done(err);
+          var body = res.text.toString();
+          body.should.containEql('<Content><![CDATA[' + (info.recognition + info.recognition) + ']]></Content>');
           done();
         });
       });
@@ -242,12 +275,56 @@ describe('weixin.js', function () {
         .end(function(err, res){
           if (err) return done(err);
           var body = res.text.toString();
-          body.should.include('<ToUserName><![CDATA[diaosi]]></ToUserName>');
-          body.should.include('<FromUserName><![CDATA[nvshen]]></FromUserName>');
-          body.should.match(/<CreateTime>\d{13}<\/CreateTime>/);
-          body.should.include('<MsgType><![CDATA[text]]></MsgType>');
-          body.should.include('<Content><![CDATA[你好]]></Content>');
-          body.should.include('<FuncFlag>0</FuncFlag>');
+          body.should.containEql('<ToUserName><![CDATA[diaosi]]></ToUserName>');
+          body.should.containEql('<FromUserName><![CDATA[nvshen]]></FromUserName>');
+          body.should.match(/<CreateTime>\d{10}<\/CreateTime>/);
+          body.should.containEql('<MsgType><![CDATA[text]]></MsgType>');
+          body.should.containEql('<Content><![CDATA[你好]]></Content>');
+          done();
+        });
+      });
+    });
+  });
+
+  describe('ignore some types of message', function() {
+    var app;
+    before(function () {
+      app = connect();
+      app.use(connect.query());
+      // 指定不回复的消息的类型
+      webot.set('ignore', {
+        pattern: function(info) {
+         return !info.is('text');
+        },
+        handler: function(info) {
+         info.noReply = true;
+         return;
+        }
+     });
+
+      // 接管消息请求
+      webot.watch(app, 'your1weixin2token');
+    });
+
+    describe('ignore no text type message', function(done) {
+      it('should be empty', function (done) {
+        var info = {
+          sp: 'test',
+          user: 'test',
+          type: 'voice',
+          mediaId: '123',
+          format: 'mp3'
+        };
+        request(app)
+        .post('/' + tail('your1weixin2token'))
+        .send(template(info))
+        .expect(200)
+        .end(function(err, res){
+          if (err) {
+            return done(err);
+          }
+          var body = res.text.toString();
+          body.should.equal('');
           done();
         });
       });
